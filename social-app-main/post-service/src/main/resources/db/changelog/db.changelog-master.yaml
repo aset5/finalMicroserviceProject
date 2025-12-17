@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changeset/001-create-posts.sql
+  - include:
+      file: db/changelog/changeset/002-create-post-media.sql
+  - include:
+      file: db/changelog/changeset/003-create-comments.sql
+  - include:
+      file: db/changelog/changeset/004-create-likes.sql
