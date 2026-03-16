@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кабинет студента | Digital Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
+        .navbar { background: #667eea; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .dashboard-card { border: none; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .status-badge { font-size: 1.1rem; padding: 12px 24px; border-radius: 10px; }
+        .profile-header { background: white; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark mb-4">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1">🎓 Digital Portal</span>
+        <button class="btn btn-outline-light btn-sm" onclick="logout()">Выйти</button>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="profile-header shadow-sm text-center">
+                <div class="mb-3 position-relative">
+                    <img id="profileImg" src="https://ui-avatars.com/api/?name=User&background=667eea&color=fff&size=128"
+                         class="rounded-circle shadow-sm" alt="Avatar">
+                </div>
+                <h4 id="userName" class="fw-bold mb-1 text-dark">Загрузка...</h4>
+                <p id="userEmail" class="text-muted small mb-3">...</p>
+                <hr>
+
+                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="editProfile()">
+                    ⚙️ Настройки профиля
+                </button>
+
+                <input type="file" id="resumeUpload" style="display:none" onchange="handleFileUpload(this)">
+                <button class="btn btn-sm btn-light w-100" onclick="document.getElementById('resumeUpload').click()">
+                    📄 Загрузить резюме (PDF)
+                </button>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card dashboard-card p-4 mb-4">
+                <h4 class="fw-bold mb-4 text-primary">Мой прогресс</h4>
+
+                <div class="p-3 bg-light rounded-3 mb-4">
+                    <label class="form-label d-block text-muted small fw-bold">ТЕКУЩИЙ СТАТУС ВЕРИФИКАЦИИ</label>
+                    <div id="statusBox">
+                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                    </div>
+                </div>
+
+                <div id="companySection" style="display:none;" class="alert alert-success border-0 shadow-sm p-4">
+                    <h4 class="fw-bold">Доступ открыт!</h4>
+                    <p>Университет подтвердил ваши данные. Вы можете искать компании.</p>
+                    <button class="btn btn-success fw-bold px-4" onclick="goToVacancies()">
+                        Перейти к списку вакансий
+                    </button>
+                </div>
+            </div>
+
+            <div class="card dashboard-card p-4">
+                <h5 class="fw-bold mb-3">Полезные ресурсы</h5>
+                <div class="list-group list-group-flush">
+                    <button class="list-group-item list-group-item-action border-0 px-0 text-primary" onclick="showGuideline()">
+                        📌 Как подготовиться к собеседованию?
+                    </button>
+                    <button class="list-group-item list-group-item-action border-0 px-0 text-primary" onclick="downloadTemplate()">
+                        📑 Скачать шаблон договора (.docx)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. ПАРСИНГ ТОКЕНА
+    function parseJwt(token) {
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            return JSON.parse(window.atob(base64));
+        } catch (e) { return null; }
+    }
+
+    // 2. ВЫХОД
+    function logout() {
+        if(confirm("Вы уверены, что хотите выйти?")) {
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+        }
+    }
+
+    // 3. ПЕРЕХОД К ВАКАНСИЯМ
+    function goToVacancies() {
+        // Здесь можно добавить проверку, загрузил ли пользователь резюме
+        window.location.href = '/vacancies';
+    }
+
+    // 4. РЕДАКТИРОВАНИЕ ПРОФИЛЯ
+    function editProfile() {
+        const newName = prompt("Введите новое имя отображения:");
+        if (newName) {
+            document.getElementById('userName').innerText = newName;
+            // Тут должен быть FETCH запрос к твоему Auth Service для смены имени в БД
+            alert("Имя успешно обновлено (визуально)");
+        }
+    }
+
+    // 5. ЗАГРУЗКА ФАЙЛА
+    async function handleFileUpload(input) {
+        const file = input.files[0];
+        if (file) {
+            if (file.type !== "application/pdf") {
+                alert("Пожалуйста, загрузите файл в формате PDF");
+                return;
+            }
+            alert(`Файл "${file.name}" выбран. Здесь должен быть POST запрос к сервису хранения.`);
+        }
+    }
+
+    // 6. СКАЧИВАНИЕ ШАБЛОНА
+    function downloadTemplate() {
+        alert("Запрос на скачивание шаблона отправлен в university-service...");
+        // window.location.href = "/api/v1/university/download/template";
+    }
+
+    // 7. ПРОВЕРКА СТАТУСА ПРИ ЗАГРУЗКЕ
+    async function checkStatus() {
+        const token = localStorage.getItem('token');
+        if (!token) { window.location.href = '/login'; return; }
+
+        const userData = parseJwt(token);
+        const studentId = userData.id || userData.userId || userData.sub;
+
+        // Заполняем данные из токена
+        document.getElementById('userName').innerText = userData.fullName || userData.sub || "Студент";
+        document.getElementById('userEmail').innerText = userData.email || "email не указан";
+        document.getElementById('profileImg').src = `https://ui-avatars.com/api/?name=${userData.sub}&background=667eea&color=fff&size=128`;
+
+        try {
+            const res = await fetch(`/api/v1/university/student/${studentId}/is-ready`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+
+            const statusBox = document.getElementById('statusBox');
+            const companySection = document.getElementById('companySection');
+
+            if (res.ok) {
+                const isReady = await res.json();
+                if (isReady === true) {
+                    statusBox.innerHTML = '<span class="badge bg-success status-badge">Верифицирован ✅</span>';
+                    companySection.style.display = 'block';
+                } else {
+                    statusBox.innerHTML = '<span class="badge bg-warning text-dark status-badge">На проверке у деканата ⏳</span>';
+                }
+            } else {
+                statusBox.innerHTML = '<span class="text-danger">Ошибка получения статуса</span>';
+            }
+        } catch (e) {
+            statusBox.innerHTML = '<span class="text-danger">Сервер недоступен</span>';
+        }
+    }
+
+    window.onload = checkStatus;
+</script>
+
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление пользователями | Digital Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f7f6; }
+        .navbar { background: #212529; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .card { border: none; border-radius: 12px; }
+        .table-container { background: white; border-radius: 12px; overflow: hidden; }
+        .role-badge { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .nav-pills .nav-link { color: #6c757d; font-weight: 600; border-radius: 8px; }
+        .nav-pills .nav-link.active { background-color: #0d6efd; color: white; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="#">🛡️ Admin Console</a>
+        <div class="d-flex align-items-center">
+            <span id="adminEmail" class="text-white-50 me-3 small">...</span>
+            <button class="btn btn-outline-danger btn-sm" onclick="logout()">Выйти</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <ul class="nav nav-pills mb-3 bg-white p-2 rounded shadow-sm" id="roleTabs">
+                <li class="nav-item"><button class="nav-link active" onclick="filterByRole('ALL')">Все пользователи</button></li>
+                <li class="nav-item"><button class="nav-link" onclick="filterByRole('STUDENT')">🎓 Студенты</button></li>
+                <li class="nav-item"><button class="nav-link" onclick="filterByRole('COMPANY')">🏢 Компании</button></li>
+                <li class="nav-item"><button class="nav-link" onclick="filterByRole('UNIVERSITY')">🏛️ ВУЗы</button></li>
+                <li class="nav-item"><button class="nav-link" onclick="filterByRole('ADMIN')">🔑 Админы</button></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-3">
+            <h4 class="fw-bold mb-0">Аккаунты (<span id="userCount">0</span>)</h4>
+        </div>
+        <div class="col-md-6">
+            <input type="text" id="searchInput" class="form-control" placeholder="Поиск по Email или имени..." onkeyup="handleSearch()">
+        </div>
+        <div class="col-md-3 text-end">
+            <button class="btn btn-outline-primary" onclick="loadUsers()">🔄 Обновить</button>
+        </div>
+    </div>
+
+    <div class="card shadow-sm table-container">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th class="ps-4">ID</th>
+                    <th>ФИО / Статус</th>
+                    <th>Email</th>
+                    <th>Роль</th>
+                    <th class="text-end pe-4">Действия</th>
+                </tr>
+                </thead>
+                <tbody id="userTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Редактирование аккаунта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editUserId">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Полное имя</label>
+                    <input type="text" id="editFullName" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Роль</label>
+                    <select id="editRole" class="form-select">
+                        <option value="STUDENT">STUDENT</option>
+                        <option value="COMPANY">COMPANY</option>
+                        <option value="UNIVERSITY">UNIVERSITY</option>
+                        <option value="ADMIN">ADMIN</option>
+                    </select>
+                </div>
+                <hr>
+                <div class="form-check form-switch p-0" style="padding-left: 2.5em !important;">
+                    <input class="form-check-input" type="checkbox" id="editEnabled" checked>
+                    <label class="form-check-label fw-bold" for="editEnabled">Аккаунт разблокирован</label>
+                    <div class="form-text">Если выключить, пользователь не сможет войти в систему.</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary px-4" onclick="saveUserChanges()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let allUsers = [];
+    let currentRoleFilter = 'ALL';
+
+    function parseJwt(token) {
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            return JSON.parse(window.atob(base64));
+        } catch (e) { return null; }
+    }
+
+    async function loadUsers() {
+        const token = localStorage.getItem('token');
+        if (!token) { window.location.href = '/login'; return; }
+        const decoded = parseJwt(token);
+        document.getElementById('adminEmail').innerText = decoded.sub;
+
+        try {
+            const res = await fetch('/api/v1/auth/users/all', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (res.ok) {
+                allUsers = await res.json();
+                applyFilters();
+            }
+        } catch (err) { console.error(err); }
+    }
+
+    function filterByRole(role) {
+        currentRoleFilter = role;
+        // Переключаем активный класс на вкладках
+        document.querySelectorAll('#roleTabs .nav-link').forEach(btn => {
+            btn.classList.remove('active');
+            if(btn.innerText.includes(role) || (role === 'ALL' && btn.innerText === 'Все пользователи')) {
+                btn.classList.add('active');
+            }
+        });
+        applyFilters();
+    }
+
+    function handleSearch() { applyFilters(); }
+
+    function applyFilters() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        let filtered = allUsers;
+
+        if (currentRoleFilter !== 'ALL') {
+            filtered = filtered.filter(u => u.role === currentRoleFilter);
+        }
+
+        if (query) {
+            filtered = filtered.filter(u =>
+                u.email.toLowerCase().includes(query) ||
+                (u.fullName && u.fullName.toLowerCase().includes(query))
+            );
+        }
+        renderTable(filtered);
+    }
+
+    function renderTable(users) {
+        const table = document.getElementById('userTable');
+        document.getElementById('userCount').innerText = users.length;
+
+        table.innerHTML = users.map(user => `
+            <tr>
+                <td class="ps-4 text-muted small">#${user.id}</td>
+                <td>
+                    <div class="fw-bold">${user.fullName || '---'}</div>
+                    <div class="small text-muted">
+                        <span class="status-dot ${user.enabled ? 'bg-success' : 'bg-danger'}"></span>
+                        ${user.enabled ? 'Активен' : 'Заблокирован'}
+                    </div>
+                </td>
+                <td>${user.email}</td>
+                <td><span class="badge role-badge ${getRoleClass(user.role)}">${user.role}</span></td>
+                <td class="text-end pe-4">
+                    <button class="btn btn-sm btn-outline-primary" onclick="openEditModal(${user.id}, '${user.fullName}', '${user.role}', ${user.enabled})">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${user.id})">🗑️</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function openEditModal(id, name, role, enabled) {
+        document.getElementById('editUserId').value = id;
+        document.getElementById('editFullName').value = (name === 'null' || !name) ? '' : name;
+        document.getElementById('editRole').value = role;
+        document.getElementById('editEnabled').checked = enabled;
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+    }
+
+    async function saveUserChanges() {
+        const id = document.getElementById('editUserId').value;
+        const data = {
+            fullName: document.getElementById('editFullName').value,
+            role: document.getElementById('editRole').value,
+            enabled: document.getElementById('editEnabled').checked
+        };
+
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/v1/auth/users/${id}/update`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(data)
+        });
+
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+            loadUsers();
+        } else { alert("Ошибка сохранения"); }
+    }
+
+    async function deleteUser(id) {
+        if (!confirm("Удалить пользователя навсегда?")) return;
+        const token = localStorage.getItem('token');
+        await fetch(`/api/v1/auth/users/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        loadUsers();
+    }
+
+    function getRoleClass(role) {
+        switch(role) {
+            case 'ADMIN': return 'bg-dark';
+            case 'STUDENT': return 'bg-info text-dark';
+            case 'UNIVERSITY': return 'bg-primary';
+            case 'COMPANY': return 'bg-success';
+            default: return 'bg-secondary';
+        }
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/login'; }
+
+    window.onload = loadUsers;
+</script>
+</body>
+</html>
