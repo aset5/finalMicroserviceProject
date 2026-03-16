@@ -23,6 +23,10 @@ public class JwtUtil {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", user.getRole().name());
         claims.put("userId", user.getId());
+        claims.put("universityId", user.getUniversityId());
+        if (user.getUniversityId() != null) {
+            claims.put("universityId", user.getUniversityId());
+        }
 
         return Jwts.builder()
                 .setClaims(claims)

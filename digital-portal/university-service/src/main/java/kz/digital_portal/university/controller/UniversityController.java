@@ -4,7 +4,8 @@ import kz.digital_portal.university.model.Enrollment;
 import kz.digital_portal.university.model.Internship;
 import kz.digital_portal.university.repository.EnrollmentRepository;
 import kz.digital_portal.university.repository.InternshipRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import kz.digital_portal.university.service.InternshipService; // Проверь этот импорт
+import lombok.RequiredArgsConstructor; // Удобно для конструктора
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,21 +13,46 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/university")
+// Заменяем @Autowired на конструктор через Lombok для всех final полей
+@RequiredArgsConstructor
 public class UniversityController {
 
-    @Autowired
-    private InternshipRepository internshipRepository;
+    private final InternshipRepository internshipRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final InternshipService internshipService; // Теперь инициализируется корректно
 
-    @Autowired
-    private EnrollmentRepository enrollmentRepository;
+    // 1. Создание стажировки (JSON версия)
+    @PostMapping("/internship/create")
+    public ResponseEntity<?> createInternshipApi(@RequestBody Internship internship) {
+        internship.setAvailableSlots(internship.getMaxSlots());
+        internship.setVisibleToCompanies(false);
+        // Устанавливаем статус PENDING, чтобы админ сразу её увидел
+        internship.setStatus(Internship.InternshipStatus.PENDING);
+        internshipRepository.save(internship);
+        return ResponseEntity.ok("Стажировка создана и отправлена на модерацию");
+    }
 
-    // Студент видит список стажировок своего ВУЗа
+    // 2. Версия для HTML-формы (с кнопками)
+    @PostMapping("/create")
+    public ResponseEntity<?> createInternshipForm(@ModelAttribute Internship internship,
+                                                  @RequestParam(required = false) String action) {
+        if ("submit".equals(action)) {
+            internship.setStatus(Internship.InternshipStatus.PENDING); // К админу
+        } else {
+            internship.setStatus(Internship.InternshipStatus.DRAFT);   // В черновик
+        }
+
+        internshipService.save(internship);
+        // Так как это @RestController, лучше вернуть статус,
+        // но если нужен редирект на фронте, используй:
+        return ResponseEntity.ok("Статус установлен: " + internship.getStatus());
+    }
+
     @GetMapping("/internships-by-university/{uniId}")
     public List<Internship> getUniInternships(@PathVariable Long uniId) {
         return internshipRepository.findAllByUniversityId(uniId);
     }
 
-    // Университет завершает стажировку студента
     @PostMapping("/complete-internship")
     public String complete(@RequestParam Long studentId) {
         Enrollment enrollment = enrollmentRepository.findByStudentId(studentId)
@@ -37,33 +63,10 @@ public class UniversityController {
         return "Стажировка успешно завершена!";
     }
 
-    // ПРОВЕРКА ДЛЯ COMPANY SERVICE
-    // Этот метод — "мост". Когда студент захочет зайти в Company Service,
-    // тот вызовет этот метод.
     @GetMapping("/student/{studentId}/is-ready")
     public boolean checkStudentStatus(@PathVariable Long studentId) {
         return enrollmentRepository.findByStudentId(studentId)
                 .map(enrollment -> "COMPLETED".equals(enrollment.getStatus()))
                 .orElse(false);
-    }
-
-    @PostMapping("/internship/create")
-    public ResponseEntity<?> createInternship(@RequestBody Internship internship) {
-        internship.setAvailableSlots(internship.getMaxSlots());
-        internship.setVisibleToCompanies(false); // По умолчанию скрыта
-        internshipRepository.save(internship);
-        return ResponseEntity.ok("Стажировка создана и ждет публикации");
-    }
-
-    // 2. Дать доступ компаниям к этой вакансии
-    @PostMapping("/internship/{id}/publish")
-    public ResponseEntity<?> publishToCompanies(@PathVariable Long id) {
-        return internshipRepository.findById(id)
-                .map(internship -> {
-                    internship.setVisibleToCompanies(true);
-                    internshipRepository.save(internship);
-                    return ResponseEntity.ok("Вакансия теперь доступна компаниям");
-                })
-                .orElse(ResponseEntity.notFound().build());
     }
 }

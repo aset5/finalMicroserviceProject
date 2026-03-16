@@ -20,14 +20,16 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Важно для JWT
+                .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/university/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ADMIN")
+                        // Разрешаем студенту проверять свой статус и видеть стажировки
+                        .requestMatchers("/api/v1/university/student/**").hasAnyAuthority("STUDENT", "UNIVERSITY", "ADMIN")
+                        .requestMatchers("/api/v1/university/internships-by-university/**").hasAnyAuthority("STUDENT", "UNIVERSITY", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 }

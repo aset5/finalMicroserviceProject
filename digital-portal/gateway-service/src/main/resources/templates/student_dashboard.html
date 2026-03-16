@@ -45,7 +45,18 @@
                 </button>
             </div>
         </div>
+        <div class="card dashboard-card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="fw-bold text-primary mb-0">Доступные программы ВУЗа</h4>
+                <button class="btn btn-sm btn-link text-decoration-none" onclick="loadInternships()">🔄 Обновить</button>
+            </div>
 
+            <div id="internshipList" class="row">
+                <div class="text-center text-muted py-3">
+                    <div class="spinner-border spinner-border-sm text-primary"></div> Загрузка программ...
+                </div>
+            </div>
+        </div>
         <div class="col-lg-8">
             <div class="card dashboard-card p-4 mb-4">
                 <h4 class="fw-bold mb-4 text-primary">Мой прогресс</h4>
@@ -90,7 +101,56 @@
             return JSON.parse(window.atob(base64));
         } catch (e) { return null; }
     }
+    async function loadInternships() {
+        const token = localStorage.getItem('token');
+        const userData = parseJwt(token);
 
+        // Берем ID университета из токена (убедись, что Auth Service его туда кладет)
+        const uniId = userData.universityId;
+        const listContainer = document.getElementById('internshipList');
+
+        if (!uniId) {
+            listContainer.innerHTML = '<p class="text-danger small">Ошибка: ID университета не найден в профиле</p>';
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/v1/university/internships-by-university/${uniId}`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+
+            if (res.ok) {
+                const internships = await response.json();
+
+                if (internships.length === 0) {
+                    listContainer.innerHTML = '<p class="text-muted text-center">Ваш университет пока не добавил программ</p>';
+                    return;
+                }
+
+                listContainer.innerHTML = internships.map(i => `
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100 border-0 shadow-sm p-3">
+                        <h6 class="fw-bold mb-1">${i.title}</h6>
+                        <p class="text-muted small mb-2">${i.description.substring(0, 100)}...</p>
+                        <div class="d-flex justify-content-between align-items-center mt-auto">
+                            <span class="badge bg-light text-primary">Мест: ${i.availableSlots}</span>
+                            <button class="btn btn-sm btn-primary" onclick="applyToInternship(${i.id})">Подать заявку</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            }
+        } catch (e) {
+            listContainer.innerHTML = '<p class="text-danger">Не удалось загрузить список</p>';
+        }
+    }
+
+    // Вызови эту функцию при загрузке страницы внутри checkStatus()
+    // или добавь в window.onload:
+    window.onload = () => {
+        checkStatus();
+        loadInternships();
+    };
     // 2. ВЫХОД
     function logout() {
         if(confirm("Вы уверены, что хотите выйти?")) {

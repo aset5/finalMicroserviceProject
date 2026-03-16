@@ -37,4 +37,13 @@ public class AdminModerationController {
             return ResponseEntity.ok().build();
         }).orElse(ResponseEntity.notFound().build());
     }
+    @PostMapping("/internship/{id}/send-to-moderation")
+    public ResponseEntity<?> sendToModeration(@PathVariable Long id) {
+        return internshipRepository.findById(id)
+                .map(i -> {
+                    i.setStatus(Internship.InternshipStatus.PENDING);
+                    internshipRepository.save(i);
+                    return ResponseEntity.ok().build();
+                }).orElse(ResponseEntity.notFound().build());
+    }
 }
