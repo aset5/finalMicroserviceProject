@@ -45,7 +45,6 @@
         </div>
 
         <div class="col-md-9">
-
             <div id="sectionUsers">
                 <div class="row mb-3 align-items-center">
                     <div class="col-md-6">
@@ -87,7 +86,6 @@
                     <div class="text-center py-5 text-muted">Загрузка заявок...</div>
                 </div>
             </div>
-
         </div>
     </div>
 </div>
@@ -96,7 +94,7 @@
     <div class="modal-dialog">
         <div class="modal-content border-0 shadow">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold">Аккаунт #${editUserId}</h5>
+                <h5 class="modal-title fw-bold">Редактирование пользователя</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -134,22 +132,28 @@
 
     function parseJwt(token) {
         try { return JSON.parse(window.atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); }
-        catch (e) { return null; }
+        catch (e) { console.error("Ошибка парсинга токена", e); return null; }
     }
 
     function switchTab(tab) {
+        console.log("Switching to tab:", tab);
         document.getElementById('sectionUsers').style.display = (tab === 'users') ? 'block' : 'none';
         document.getElementById('sectionModeration').style.display = (tab === 'moderation') ? 'block' : 'none';
+
         document.getElementById('btnUsers').classList.toggle('active', tab === 'users');
         document.getElementById('btnModeration').classList.toggle('active', tab === 'moderation');
-        if(tab === 'moderation') loadPendingInternships();
+
+        if(tab === 'moderation') {
+            loadPendingInternships();
+        }
     }
 
-    // --- ЛОГИКА ПОЛЬЗОВАТЕЛЕЙ ---
     async function loadUsers() {
         const token = localStorage.getItem('token');
         if (!token) { window.location.href = '/login'; return; }
-        document.getElementById('adminEmail').innerText = parseJwt(token).sub;
+
+        const decoded = parseJwt(token);
+        if (decoded) document.getElementById('adminEmail').innerText = decoded.sub;
 
         try {
             const res = await fetch('/api/v1/auth/users/all', { headers: { 'Authorization': 'Bearer ' + token } });
@@ -157,7 +161,7 @@
                 allUsers = await res.json();
                 applyFilters();
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Ошибка при загрузке пользователей:", err); }
     }
 
     function handleSearch() { applyFilters(); }
@@ -180,6 +184,7 @@
 
     function renderTable(users) {
         const table = document.getElementById('userTable');
+        if (!table) return;
         table.innerHTML = users.map(user => `
             <tr>
                 <td class="ps-4">
@@ -223,45 +228,61 @@
             role: document.getElementById('editRole').value,
             enabled: document.getElementById('editEnabled').checked
         };
-        const res = await fetch(`/api/v1/auth/users/${id}/update`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') },
-            body: JSON.stringify(data)
-        });
-        if (res.ok) {
-            bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
-            loadUsers();
-        }
+        try {
+            const res = await fetch(`/api/v1/auth/users/${id}/update`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') },
+                body: JSON.stringify(data)
+            });
+            if (res.ok) {
+                const modalElem = document.getElementById('editModal');
+                bootstrap.Modal.getInstance(modalElem).hide();
+                loadUsers();
+            }
+        } catch (e) { console.error(e); }
     }
 
     async function deleteUser(id) {
         if (!confirm("Удалить аккаунт?")) return;
-        await fetch(`/api/v1/auth/users/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-        });
-        loadUsers();
+        try {
+            await fetch(`/api/v1/auth/users/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+            });
+            loadUsers();
+        } catch (e) { console.error(e); }
     }
 
     // --- МОДЕРАЦИЯ ---
     async function loadPendingInternships() {
+        console.log("Loading internships...");
         const container = document.getElementById('moderationList');
+        const token = localStorage.getItem('token');
+
         try {
             const res = await fetch('/api/v1/admin/moderation/pending', {
-                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+                headers: { 'Authorization': 'Bearer ' + token }
             });
+
             if (res.ok) {
                 const list = await res.json();
+                console.log("Internships received:", list);
+
                 document.getElementById('pendingCount').innerText = list.length;
                 document.getElementById('pendingCount').style.display = list.length > 0 ? 'inline' : 'none';
+
                 if(list.length === 0) {
-                    container.innerHTML = '<div class="card p-5 text-center text-muted">Заявок нет</div>';
+                    container.innerHTML = '<div class="card p-5 text-center text-muted shadow-sm">Заявок на модерацию нет ✅</div>';
                     return;
                 }
+
                 container.innerHTML = list.map(i => `
                     <div class="card p-3 mb-3 shadow-sm border-start border-warning border-4">
                         <div class="d-flex justify-content-between align-items-center">
-                            <div><h5 class="fw-bold mb-1">${i.title}</h5><p class="small text-muted mb-0">${i.description}</p></div>
+                            <div>
+                                <h5 class="fw-bold mb-1">${i.title}</h5>
+                                <p class="small text-muted mb-0">${i.description}</p>
+                            </div>
                             <div class="btn-group">
                                 <button class="btn btn-sm btn-success" onclick="verifyInternship(${i.id}, 'approve')">Одобрить</button>
                                 <button class="btn btn-sm btn-outline-danger" onclick="verifyInternship(${i.id}, 'reject')">Отклонить</button>
@@ -269,16 +290,24 @@
                         </div>
                     </div>
                 `).join('');
+            } else {
+                console.error("Сервер вернул ошибку:", res.status);
+                container.innerHTML = `<div class="alert alert-danger">Ошибка сервера: ${res.status}</div>`;
             }
-        } catch (err) { container.innerHTML = 'Ошибка загрузки'; }
+        } catch (err) {
+            console.error("Сетевая ошибка:", err);
+            container.innerHTML = '<div class="alert alert-danger">Не удалось подключиться к сервису модерации</div>';
+        }
     }
 
     async function verifyInternship(id, action) {
-        const res = await fetch(`/api/v1/admin/internship/${id}/${action}`, {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-        });
-        if (res.ok) loadPendingInternships();
+        try {
+            const res = await fetch(`/api/v1/admin/internship/${id}/${action}`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+            });
+            if (res.ok) loadPendingInternships();
+        } catch (e) { console.error(e); }
     }
 
     function logout() { localStorage.clear(); window.location.href = '/login'; }

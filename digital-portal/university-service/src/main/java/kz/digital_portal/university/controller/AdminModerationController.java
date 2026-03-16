@@ -15,17 +15,24 @@ public class AdminModerationController {
 
     private final InternshipRepository internshipRepository;
 
-    // Список всех стажировок, которые ждут проверки
     @GetMapping("/moderation/pending")
-    public List<Internship> getPendingInternships() {
+    public List<Internship> getPending() {
         return internshipRepository.findAllByStatus(Internship.InternshipStatus.PENDING);
     }
 
-    // Одобрить стажировку
     @PostMapping("/internship/{id}/approve")
     public ResponseEntity<?> approve(@PathVariable Long id) {
         return internshipRepository.findById(id).map(i -> {
             i.setStatus(Internship.InternshipStatus.APPROVED);
+            internshipRepository.save(i);
+            return ResponseEntity.ok().build();
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/internship/{id}/reject")
+    public ResponseEntity<?> reject(@PathVariable Long id) {
+        return internshipRepository.findById(id).map(i -> {
+            i.setStatus(Internship.InternshipStatus.REJECTED);
             internshipRepository.save(i);
             return ResponseEntity.ok().build();
         }).orElse(ResponseEntity.notFound().build());
