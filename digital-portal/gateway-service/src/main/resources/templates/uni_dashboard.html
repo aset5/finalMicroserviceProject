@@ -13,9 +13,17 @@
     .btn-primary { background: #764ba2; border: none; }
     .btn-primary:hover { background: #667eea; }
     .section-title { border-left: 5px solid #764ba2; padding-left: 15px; margin-bottom: 25px; font-weight: 700; }
-    .student-item { border-bottom: 1px solid #eee; padding: 15px 0; }
-    .student-item:last-child { border-bottom: none; }
-    .profile-info { font-size: 0.9rem; color: #6c757d; }
+    .item-row { border-bottom: 1px solid #eee; padding: 15px 0; }
+    .item-row:last-child { border-bottom: none; }
+    .profile-info { font-size: 0.85rem; color: #6c757d; }
+
+    /* Статусы */
+    .badge-status { font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; }
+    .status-draft { background: #e9ecef; color: #495057; }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-approved { background: #d4edda; color: #155724; }
+    .status-published { background: #764ba2; color: #fff; }
+    .status-rejected { background: #f8d7da; color: #721c24; }
   </style>
 </head>
 <body>
@@ -33,39 +41,49 @@
 <div class="container">
   <div class="row">
     <div class="col-lg-5">
-      <div class="card p-4">
+      <div class="card p-4 shadow-sm">
         <h4 class="section-title text-primary">Новая стажировка</h4>
         <div class="mb-3">
-          <label class="form-label small">Название программы</label>
-          <input type="text" id="title" class="form-control" placeholder="Например: Весенняя практика 2026">
+          <label class="form-label small fw-bold">Название программы</label>
+          <input type="text" id="title" class="form-control" placeholder="Например: Java Spring Boot">
         </div>
         <div class="mb-3">
-          <label class="form-label small">Описание</label>
-          <textarea id="desc" class="form-control" rows="4" placeholder="Укажите требования и сроки..."></textarea>
+          <label class="form-label small fw-bold">Количество мест</label>
+          <input type="number" id="maxSlots" class="form-control" placeholder="10" min="1">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">Описание</label>
+          <textarea id="desc" class="form-control" rows="3" placeholder="Требования к студентам..."></textarea>
         </div>
         <button class="btn btn-primary w-100 fw-bold" onclick="createInternship()">
-          🚀 Опубликовать программу
+          ➕ Создать черновик
         </button>
       </div>
 
-      <div class="card p-4">
+      <div class="card p-4 shadow-sm">
         <h5 class="fw-bold mb-3">Инструменты</h5>
-        <button class="btn btn-outline-secondary btn-sm w-100 mb-2" onclick="downloadReport()">📊 Скачать отчет по студентам</button>
-        <button class="btn btn-outline-secondary btn-sm w-100" onclick="editUniversityProfile()">⚙️ Настройки вуза</button>
+        <button class="btn btn-outline-secondary btn-sm w-100 mb-2" onclick="alert('Отчет формируется')">📊 Отчет по практике</button>
       </div>
     </div>
 
     <div class="col-lg-7">
-      <div class="card p-4">
+      <div class="card p-4 shadow-sm">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <h4 class="section-title text-success mb-0">Заявки на проверку</h4>
+          <h4 class="section-title text-info mb-0">Управление программами</h4>
+          <button class="btn btn-sm btn-link text-decoration-none" onclick="loadMyInternships()">🔄 Обновить</button>
+        </div>
+        <div id="internshipList">
+          <p class="text-center text-muted py-3">Загрузка...</p>
+        </div>
+      </div>
+
+      <div class="card p-4 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="section-title text-success mb-0">Верификация студентов</h4>
           <button class="btn btn-sm btn-link text-decoration-none" onclick="loadStudents()">🔄 Обновить</button>
         </div>
         <div id="studentList">
-          <div class="text-center text-muted p-5">
-            <div class="spinner-border spinner-border-sm mb-2 text-success"></div>
-            <p>Синхронизация со списком студентов...</p>
-          </div>
+          <p class="text-center text-muted py-3">Загрузка заявок...</p>
         </div>
       </div>
     </div>
@@ -73,7 +91,6 @@
 </div>
 
 <script>
-  // 1. ПОЛУЧЕНИЕ ДАННЫХ ИЗ ТОКЕНА
   function parseJwt(token) {
     try {
       const base64Url = token.split('.')[1];
@@ -82,134 +99,165 @@
     } catch (e) { return null; }
   }
 
-  // 2. ВЫХОД
   function logout() {
-    if(confirm("Завершить сессию университета?")) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
+    localStorage.removeItem('token');
+    window.location.href = '/login';
   }
 
-  // 3. ПЕРВИЧНАЯ НАСТРОЙКА ПРОФИЛЯ
   function setupDashboard() {
     const token = localStorage.getItem('token');
     if (!token) { window.location.href = '/login'; return; }
-
     const userData = parseJwt(token);
     document.getElementById('uniNameDisplay').innerText = userData.sub || "Университет";
+
     loadStudents();
+    loadMyInternships();
   }
 
-  // 4. СОЗДАНИЕ СТАЖИРОВКИ
+  // СОЗДАНИЕ (Статус DRAFT по умолчанию на бэкенде)
   async function createInternship() {
     const title = document.getElementById('title').value;
     const desc = document.getElementById('desc').value;
+    const maxSlots = document.getElementById('maxSlots').value;
 
-    if(!title || !desc) {
-      alert("Пожалуйста, заполните все поля");
-      return;
-    }
+    if(!title || !desc || !maxSlots) { alert("Заполните все поля!"); return; }
 
     const token = localStorage.getItem('token');
-    const userData = parseJwt(token);
-
-    const data = {
-      title: title,
-      description: desc,
-      universityId: userData.id || userData.userId
-    };
-
     try {
-      const response = await fetch('/api/v1/university/internship', {
+      const response = await fetch('/api/v1/university/internship/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify(data)
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ title, description: desc, maxSlots: parseInt(maxSlots) })
       });
 
       if (response.ok) {
-        alert("Программа успешно опубликована!");
+        alert("Черновик создан!");
         document.getElementById('title').value = '';
         document.getElementById('desc').value = '';
-      } else {
-        alert("Ошибка сервера: " + response.status);
+        document.getElementById('maxSlots').value = '';
+        loadMyInternships();
       }
-    } catch (err) {
-      alert("Не удалось связаться с сервисом стажировок");
-    }
+    } catch (err) { alert("Ошибка API"); }
   }
 
-  // 5. ЗАГРУЗКА СТУДЕНТОВ
+  // ЗАГРУЗКА И ЛОГИКА КНОПОК
+  async function loadMyInternships() {
+    const token = localStorage.getItem('token');
+    const container = document.getElementById('internshipList');
+
+    try {
+      const response = await fetch('/api/v1/university/my-internships', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+
+      if (response.ok) {
+        const list = await response.json();
+        if (list.length === 0) {
+          container.innerHTML = '<div class="text-center text-muted py-3">Программ пока нет</div>';
+          return;
+        }
+
+        container.innerHTML = list.map(i => {
+          let actionHtml = '';
+          let statusBadge = '';
+
+          // Логика кнопок на основе статуса
+          switch(i.status) {
+            case 'DRAFT':
+              statusBadge = '<span class="badge-status status-draft">Черновик</span>';
+              actionHtml = `<button class="btn btn-sm btn-warning" onclick="changeStatus(${i.id}, 'send-to-moderation')">🛡️ На модерацию</button>`;
+              break;
+            case 'PENDING':
+              statusBadge = '<span class="badge-status status-pending">На проверке у админа</span>';
+              actionHtml = `<button class="btn btn-sm btn-light" disabled>Ожидайте...</button>`;
+              break;
+            case 'APPROVED':
+              statusBadge = '<span class="badge-status status-approved">Одобрено</span>';
+              actionHtml = `<button class="btn btn-sm btn-success" onclick="changeStatus(${i.id}, 'publish')">📢 Опубликовать</button>`;
+              break;
+            case 'PUBLISHED':
+              statusBadge = '<span class="badge-status status-published">Доступно компаниям</span>';
+              actionHtml = `<button class="btn btn-sm btn-outline-secondary" disabled>✅ Активна</button>`;
+              break;
+            case 'REJECTED':
+              statusBadge = '<span class="badge-status status-rejected">Отклонено</span>';
+              actionHtml = `<button class="btn btn-sm btn-outline-danger" onclick="alert('Причина: ' + (i.rejectionReason || 'Не указана'))">Почему?</button>`;
+              break;
+          }
+
+          return `
+            <div class="item-row d-flex justify-content-between align-items-center">
+              <div>
+                <h6 class="mb-0 fw-bold">${i.title}</h6>
+                <small class="profile-info">Места: ${i.availableSlots}/${i.maxSlots} | ${statusBadge}</small>
+              </div>
+              <div>${actionHtml}</div>
+            </div>
+          `;
+        }).join('');
+      }
+    } catch (err) { container.innerHTML = 'Ошибка загрузки'; }
+  }
+
+  // УНИВЕРСАЛЬНАЯ ФУНКЦИЯ СМЕНЫ СТАТУСА
+  async function changeStatus(id, action) {
+    const token = localStorage.getItem('token');
+    // action может быть 'send-to-moderation' или 'publish'
+    try {
+      const response = await fetch(`/api/v1/university/internship/${id}/${action}`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+
+      if (response.ok) {
+        alert("Статус обновлен!");
+        loadMyInternships();
+      } else {
+        alert("Ошибка при смене статуса");
+      }
+    } catch (err) { alert("Ошибка сети"); }
+  }
+
+  // СТУДЕНТЫ
   async function loadStudents() {
     const token = localStorage.getItem('token');
     const listDiv = document.getElementById('studentList');
-
     try {
       const response = await fetch('/api/v1/university/students/pending', {
         headers: { 'Authorization': 'Bearer ' + token }
       });
-
       if (response.ok) {
         const students = await response.json();
         if (students.length === 0) {
-          listDiv.innerHTML = '<div class="text-center py-4 text-muted">🎉 Все заявки проверены!</div>';
+          listDiv.innerHTML = '<div class="text-center py-3 text-muted">Новых заявок нет</div>';
           return;
         }
-
         listDiv.innerHTML = students.map(s => `
-                    <div class="student-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-0 fw-bold">${s.fullName || 'ID Студента: ' + s.studentId}</h6>
-                            <small class="text-muted">Просит подтверждение практики</small>
-                        </div>
-                        <div class="btn-group">
-                            <button class="btn btn-sm btn-success px-3" onclick="verifyStudent(${s.studentId}, true)">✅ Да</button>
-                            <button class="btn btn-sm btn-outline-danger px-3" onclick="verifyStudent(${s.studentId}, false)">❌ Нет</button>
-                        </div>
-                    </div>
-                `).join('');
-      } else {
-        listDiv.innerHTML = '<div class="alert alert-warning small">Не удалось загрузить список. Проверьте University Service.</div>';
+          <div class="item-row d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="mb-0 fw-bold">${s.fullName || 'Студент #' + s.studentId}</h6>
+              <small class="text-muted">Запрос верификации профиля</small>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-sm btn-success" onclick="verifyStudent(${s.studentId}, true)">✅</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="verifyStudent(${s.studentId}, false)">❌</button>
+            </div>
+          </div>
+        `).join('');
       }
-    } catch (err) {
-      listDiv.innerHTML = '<div class="text-danger small">Сервер API недоступен</div>';
-    }
+    } catch (err) { listDiv.innerHTML = 'Ошибка API'; }
   }
 
-  // 6. ВЕРИФИКАЦИЯ
   async function verifyStudent(studentId, isApproved) {
     const token = localStorage.getItem('token');
     const status = isApproved ? 'COMPLETED' : 'REJECTED';
-
-    const btnContainer = event.target.parentElement;
-    btnContainer.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-
     try {
-      const response = await fetch(`/api/v1/university/student/${studentId}/verify?status=${status}`, {
+      await fetch(`/api/v1/university/student/${studentId}/verify?status=${status}`, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token }
       });
-
-      if (response.ok) {
-        loadStudents(); // Перезагрузка списка
-      } else {
-        alert("Ошибка при смене статуса");
-        loadStudents();
-      }
-    } catch (err) {
-      alert("Ошибка сети");
-    }
-  }
-
-  // 7. ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ
-  function downloadReport() {
-    alert("Генерация PDF отчета... Файл будет загружен автоматически.");
-  }
-
-  function editUniversityProfile() {
-    alert("Переход в настройки профиля университета...");
+      loadStudents();
+    } catch (err) { alert("Ошибка"); }
   }
 
   window.onload = setupDashboard;

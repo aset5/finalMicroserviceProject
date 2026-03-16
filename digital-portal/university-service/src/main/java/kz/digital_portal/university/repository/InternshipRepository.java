@@ -6,4 +6,7 @@ import java.util.List;
 
 public interface InternshipRepository extends JpaRepository<Internship, Long> {
     List<Internship> findAllByUniversityId(Long universityId);
+
+    // НОВОЕ: Поиск всех программ по статусу (нужно для админа)
+    List<Internship> findAllByStatus(Internship.InternshipStatus status);
 }

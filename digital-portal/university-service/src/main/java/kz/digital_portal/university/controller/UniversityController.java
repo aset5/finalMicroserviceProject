@@ -5,6 +5,7 @@ import kz.digital_portal.university.model.Internship;
 import kz.digital_portal.university.repository.EnrollmentRepository;
 import kz.digital_portal.university.repository.InternshipRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,5 +45,25 @@ public class UniversityController {
         return enrollmentRepository.findByStudentId(studentId)
                 .map(enrollment -> "COMPLETED".equals(enrollment.getStatus()))
                 .orElse(false);
+    }
+
+    @PostMapping("/internship/create")
+    public ResponseEntity<?> createInternship(@RequestBody Internship internship) {
+        internship.setAvailableSlots(internship.getMaxSlots());
+        internship.setVisibleToCompanies(false); // По умолчанию скрыта
+        internshipRepository.save(internship);
+        return ResponseEntity.ok("Стажировка создана и ждет публикации");
+    }
+
+    // 2. Дать доступ компаниям к этой вакансии
+    @PostMapping("/internship/{id}/publish")
+    public ResponseEntity<?> publishToCompanies(@PathVariable Long id) {
+        return internshipRepository.findById(id)
+                .map(internship -> {
+                    internship.setVisibleToCompanies(true);
+                    internshipRepository.save(internship);
+                    return ResponseEntity.ok("Вакансия теперь доступна компаниям");
+                })
+                .orElse(ResponseEntity.notFound().build());
     }
 }

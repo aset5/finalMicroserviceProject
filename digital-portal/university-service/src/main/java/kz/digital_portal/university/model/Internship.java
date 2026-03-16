@@ -17,5 +17,19 @@ public class Internship {
     // ID университета из Auth Service
     private Long universityId;
 
+    private int maxSlots; // Ограниченные места
+    private int availableSlots;
 
+    private boolean isVisibleToCompanies = false; // Доступ для компаний
+
+    public enum InternshipStatus {
+        DRAFT,      // Только что создана вузом
+        PENDING,    // Отправлена админу на проверку
+        APPROVED,   // Одобрена админом
+        REJECTED,   // Отклонена админом
+        PUBLISHED   // Открыта для компаний (финальный этап)
+    }
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private InternshipStatus status = InternshipStatus.DRAFT;
 }
